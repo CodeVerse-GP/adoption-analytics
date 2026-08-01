@@ -1,0 +1,62 @@
+name: Publish Packages to NPM
+
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    env:
+      # Yarn reads this directly; never write the token into .yarnrc.yml.
+      YARN_NPM_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+          registry-url: https://registry.npmjs.org/
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Compile TypeScript
+        run: yarn tsc
+
+      - name: Run tests
+        run: yarn test
+        env:
+          CI: true
+
+      - name: Build workspace packages
+        run: yarn build:all
+
+      # Published one at a time, dependency order first. `common` provides the
+      # shared types and permissions that the other two import, so it has to
+      # exist on the registry before they reference it.
+      - name: Publish common
+        run: >-
+          yarn workspace @codeverse-gp/plugin-adoption-analytics-common
+          npm publish --access public --tolerate-republish
+
+      - name: Publish backend
+        run: >-
+          yarn workspace @codeverse-gp/plugin-adoption-analytics-backend
+          npm publish --access public --tolerate-republish
+
+      - name: Publish frontend
+        run: >-
+          yarn workspace @codeverse-gp/plugin-adoption-analytics
+          npm publish --access public --tolerate-republish

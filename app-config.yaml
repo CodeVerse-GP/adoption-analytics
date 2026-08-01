@@ -82,6 +82,21 @@ auth:
   providers:
     # See https://backstage.io/docs/auth/guest/provider
     guest: {}
+    # See https://backstage.io/docs/auth/microsoft/provider
+    microsoft:
+      development:
+        clientId: ${AZURE_CLIENT_ID}
+        clientSecret: ${AZURE_CLIENT_SECRET}
+        tenantId: ${AZURE_TENANT_ID}
+        # Filters away accounts from other tenants at the login prompt.
+        # Remove if your app registration is multi-tenant.
+        domainHint: ${AZURE_TENANT_ID}
+        signIn:
+          resolvers:
+            # Requires a matching User entity in the catalog. See
+            # https://backstage.io/docs/auth/microsoft/provider#resolvers
+            - resolver: emailMatchingUserEntityProfileEmail
+            - resolver: emailLocalPartMatchingUserEntityName
   # see https://backstage.io/docs/ai/mcp-actions#client-id-metadata-documents
   # to learn more about client id metadata documents
   clientIdMetadataDocuments:
@@ -138,6 +153,17 @@ kubernetes:
 permission:
   # setting this to `false` will disable permissions
   enabled: true
+
+# Consumed by packages/backend/src/extensions/permissionsPolicyExtension.ts.
+# An empty list means "unrestricted", so out of the box every signed-in
+# user sees the dashboard with masked user identifiers.
+adoptionAnalytics:
+  # Who may open the adoption analytics dashboard`.
+  viewerGroups:
+    - group:default/guests
+  # Who additionally sees un-pseudonymized user refs instead of hashes.
+  identityGroups:
+    - group:default/platform-admins
 
 # see https://backstage.io/docs/ai/mcp-actions for more details
 mcpActions:

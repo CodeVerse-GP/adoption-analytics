@@ -1,0 +1,84 @@
+{
+  "name": "@codeverse-gp/plugin-adoption-analytics",
+  "version": "1.0.0",
+  "description": "Backstage frontend plugin that captures portal usage analytics and renders an adoption dashboard.",
+  "license": "MIT",
+  "author": "CodeVerse-GP",
+  "homepage": "https://github.com/CodeVerse-GP/adoption-analytics/tree/main/plugins/adoption-analytics#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CodeVerse-GP/adoption-analytics.git",
+    "directory": "plugins/adoption-analytics"
+  },
+  "bugs": "https://github.com/CodeVerse-GP/adoption-analytics/issues",
+  "keywords": [
+    "backstage",
+    "backstage-plugin",
+    "analytics",
+    "adoption",
+    "metrics",
+    "dashboard"
+  ],
+  "sideEffects": false,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "package.json": [
+        "package.json"
+      ]
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "backstage-cli package build",
+    "clean": "backstage-cli package clean",
+    "lint": "backstage-cli package lint",
+    "prepack": "backstage-cli package prepack",
+    "postpack": "backstage-cli package postpack",
+    "start": "backstage-cli package start",
+    "test": "backstage-cli package test"
+  },
+  "dependencies": {
+    "@backstage/core-components": "backstage:^",
+    "@backstage/core-plugin-api": "backstage:^",
+    "@backstage/frontend-plugin-api": "backstage:^",
+    "@backstage/plugin-permission-react": "backstage:^",
+    "@codeverse-gp/plugin-adoption-analytics-common": "workspace:*",
+    "@material-ui/core": "^4.12.4",
+    "@mui/icons-material": "^5.18.0",
+    "lucide-react": "^0.475.0",
+    "recharts": "^2.15.4"
+  },
+  "devDependencies": {
+    "@backstage/cli": "backstage:^",
+    "@backstage/test-utils": "backstage:^",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.3"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "dist/index.esm.js",
+    "types": "dist/index.d.ts"
+  },
+  "backstage": {
+    "role": "frontend-plugin",
+    "pluginId": "adoption-analytics",
+    "pluginPackages": [
+      "@codeverse-gp/plugin-adoption-analytics",
+      "@codeverse-gp/plugin-adoption-analytics-backend",
+      "@codeverse-gp/plugin-adoption-analytics-common"
+    ]
+  }
+}

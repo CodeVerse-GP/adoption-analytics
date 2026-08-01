@@ -1,0 +1,67 @@
+{
+  "name": "@codeverse-gp/plugin-adoption-analytics-common",
+  "version": "1.0.0",
+  "description": "Shared types and permission definitions for the Backstage adoption analytics plugins.",
+  "license": "MIT",
+  "author": "CodeVerse-GP",
+  "homepage": "https://github.com/CodeVerse-GP/adoption-analytics/tree/main/plugins/adoption-analytics-common#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CodeVerse-GP/adoption-analytics.git",
+    "directory": "plugins/adoption-analytics-common"
+  },
+  "bugs": "https://github.com/CodeVerse-GP/adoption-analytics/issues",
+  "keywords": [
+    "backstage",
+    "backstage-plugin",
+    "analytics",
+    "adoption"
+  ],
+  "sideEffects": false,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "package.json": [
+        "package.json"
+      ]
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "backstage-cli package build",
+    "clean": "backstage-cli package clean",
+    "lint": "backstage-cli package lint",
+    "prepack": "backstage-cli package prepack",
+    "postpack": "backstage-cli package postpack",
+    "test": "backstage-cli package test"
+  },
+  "dependencies": {
+    "@backstage/core-plugin-api": "backstage:^",
+    "@backstage/plugin-permission-common": "backstage:^"
+  },
+  "devDependencies": {
+    "@backstage/cli": "backstage:^"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "dist/index.cjs.js",
+    "module": "dist/index.esm.js",
+    "types": "dist/index.d.ts"
+  },
+  "backstage": {
+    "role": "common-library",
+    "pluginId": "adoption-analytics",
+    "pluginPackages": [
+      "@codeverse-gp/plugin-adoption-analytics",
+      "@codeverse-gp/plugin-adoption-analytics-backend",
+      "@codeverse-gp/plugin-adoption-analytics-common"
+    ]
+  }
+}

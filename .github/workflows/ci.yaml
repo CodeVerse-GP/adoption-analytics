@@ -1,0 +1,130 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  checks:
+    name: PR checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        id: install
+        run: yarn install --immutable
+
+      - name: Compile TypeScript (yarn tsc)
+        id: tsc
+        if: always() && steps.install.outcome == 'success'
+        run: yarn tsc
+
+      - name: Prettier check (yarn prettier:check)
+        id: prettier
+        if: always() && steps.install.outcome == 'success'
+        run: yarn prettier:check
+
+      - name: Lint (yarn lint)
+        id: lint
+        if: always() && steps.install.outcome == 'success'
+        run: yarn lint:all
+
+      - name: Run tests (yarn test)
+        id: test
+        if: always() && steps.install.outcome == 'success'
+        run: yarn test
+
+      - name: Build summary
+        id: summary
+        if: always()
+        run: |
+          status() {
+            case "$1" in
+              success) echo "✅ Passed" ;;
+              failure) echo "❌ Failed" ;;
+              skipped) echo "⚠️ Skipped" ;;
+              *) echo "➖ ${1:-not run}" ;;
+            esac
+          }
+
+          overall="✅ All checks passed."
+          failed=false
+          if [ "${{ steps.install.outcome }}" != "success" ] \
+            || [ "${{ steps.tsc.outcome }}" != "success" ] \
+            || [ "${{ steps.prettier.outcome }}" != "success" ] \
+            || [ "${{ steps.lint.outcome }}" != "success" ] \
+            || [ "${{ steps.test.outcome }}" != "success" ]; then
+            overall="❌ One or more checks failed."
+            failed=true
+          fi
+
+          {
+            echo "## CI check summary"
+            echo ""
+            echo "| Check | Command | Result |"
+            echo "| ----- | ------- | ------ |"
+            echo "| Install | \`yarn install\` | $(status "${{ steps.install.outcome }}") |"
+            echo "| TypeScript | \`yarn tsc\` | $(status "${{ steps.tsc.outcome }}") |"
+            echo "| Prettier | \`yarn prettier:check\` | $(status "${{ steps.prettier.outcome }}") |"
+            echo "| Lint | \`yarn lint:all\` | $(status "${{ steps.lint.outcome }}") |"
+            echo "| Tests | \`yarn test\` | $(status "${{ steps.test.outcome }}") |"
+            echo ""
+            echo "**Overall: $overall**"
+          } > summary.md
+
+          cat summary.md >> "$GITHUB_STEP_SUMMARY"
+          echo "failed=$failed" >> "$GITHUB_OUTPUT"
+
+      - name: Post summary to PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- ci-check-summary -->';
+            const body = `${marker}\n${fs.readFileSync('summary.md', 'utf8')}`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number,
+            });
+            const existing = comments.find(
+              c => c.user.type === 'Bot' && c.body && c.body.includes(marker),
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
+
+      - name: Fail if any check failed
+        if: always() && steps.summary.outputs.failed == 'true'
+        run: |
+          echo "One or more checks failed."
+          exit 1

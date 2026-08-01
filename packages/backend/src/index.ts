@@ -28,12 +28,17 @@ backend.add(import('@backstage/plugin-auth-backend'));
 // See https://backstage.io/docs/backend-system/building-backends/migrating#the-auth-plugin
 backend.add(import('@backstage/plugin-auth-backend-module-guest-provider'));
 // See https://backstage.io/docs/auth/guest/provider
+backend.add(import('@backstage/plugin-auth-backend-module-microsoft-provider'));
+// See https://backstage.io/docs/auth/microsoft/provider
 
 // catalog plugin
 backend.add(import('@backstage/plugin-catalog-backend'));
 backend.add(
   import('@backstage/plugin-catalog-backend-module-scaffolder-entity-model'),
 );
+// Ingests Users and Groups from Microsoft Entra ID via the Graph API.
+// See https://backstage.io/docs/integrations/azure/org
+backend.add(import('@backstage/plugin-catalog-backend-module-msgraph'));
 
 // See https://backstage.io/docs/features/software-catalog/configuration#subscribing-to-catalog-errors
 backend.add(import('@backstage/plugin-catalog-backend-module-logs'));
@@ -41,9 +46,9 @@ backend.add(import('@backstage/plugin-catalog-backend-module-logs'));
 // permission plugin
 backend.add(import('@backstage/plugin-permission-backend'));
 // See https://backstage.io/docs/permissions/getting-started for how to create your own permission policy
-backend.add(
-  import('@backstage/plugin-permission-backend-module-allow-all-policy'),
-);
+// Replaces the default allow-all policy so the adoption analytics plugin's own
+// permissions can be exercised. Configure via `permission.adoptionAnalytics`.
+backend.add(import('./extensions/permissionsPolicyExtension'));
 
 // search plugin
 backend.add(import('@backstage/plugin-search-backend'));
@@ -68,5 +73,8 @@ backend.add(import('@backstage/plugin-signals-backend'));
 
 // mcp actions plugin
 backend.add(import('@backstage/plugin-mcp-actions-backend'));
+
+// adoption analytics plugin, serves /api/adoption-analytics
+backend.add(import('@codeverse-gp/plugin-adoption-analytics-backend'));
 
 backend.start();

@@ -1,0 +1,84 @@
+{
+  "name": "@codeverse-gp/plugin-adoption-analytics-backend",
+  "version": "1.0.0",
+  "description": "Backstage backend plugin that ingests and aggregates portal usage analytics (entity counts, DAU/WAU, sessions, logins).",
+  "license": "MIT",
+  "author": "CodeVerse-GP",
+  "homepage": "https://github.com/CodeVerse-GP/adoption-analytics/tree/main/plugins/adoption-analytics-backend#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CodeVerse-GP/adoption-analytics.git",
+    "directory": "plugins/adoption-analytics-backend"
+  },
+  "bugs": "https://github.com/CodeVerse-GP/adoption-analytics/issues",
+  "keywords": [
+    "backstage",
+    "backstage-plugin",
+    "analytics",
+    "adoption",
+    "metrics"
+  ],
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "package.json": [
+        "package.json"
+      ]
+    }
+  },
+  "files": [
+    "dist",
+    "config.d.ts",
+    "migrations/**/*.{js,d.ts}"
+  ],
+  "scripts": {
+    "build": "backstage-cli package build",
+    "clean": "backstage-cli package clean",
+    "lint": "backstage-cli package lint",
+    "prepack": "backstage-cli package prepack",
+    "postpack": "backstage-cli package postpack",
+    "start": "backstage-cli package start",
+    "test": "backstage-cli package test"
+  },
+  "dependencies": {
+    "@backstage/backend-plugin-api": "backstage:^",
+    "@backstage/catalog-client": "backstage:^",
+    "@backstage/catalog-model": "backstage:^",
+    "@backstage/errors": "backstage:^",
+    "@backstage/plugin-catalog-node": "backstage:^",
+    "@backstage/plugin-permission-common": "backstage:^",
+    "@codeverse-gp/plugin-adoption-analytics-common": "workspace:*",
+    "express": "^4.22.1",
+    "express-promise-router": "^4.1.1",
+    "fastq": "^1.19.1",
+    "knex": "^3.1.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@backstage/backend-test-utils": "backstage:^",
+    "@backstage/cli": "backstage:^",
+    "@types/express": "^4.17.25",
+    "@types/supertest": "^2.0.16",
+    "supertest": "^7.2.2"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "dist/index.cjs.js",
+    "types": "dist/index.d.ts"
+  },
+  "backstage": {
+    "role": "backend-plugin",
+    "pluginId": "adoption-analytics",
+    "pluginPackages": [
+      "@codeverse-gp/plugin-adoption-analytics",
+      "@codeverse-gp/plugin-adoption-analytics-backend",
+      "@codeverse-gp/plugin-adoption-analytics-common"
+    ]
+  },
+  "configSchema": "config.d.ts"
+}
