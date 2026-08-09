@@ -128,6 +128,25 @@ export class AdoptionAnalyticsDatabase {
     return Array.from(byDate.values());
   }
 
+  /**
+   * Date (YYYY-MM-DD) of each user's first-ever event across all retained
+   * history. Needed to tell new users from returning ones: a windowed
+   * scan alone would label anyone whose first event lands in the window
+   * as new, even if they had been active for months before it.
+   */
+  async getFirstSeenByUser(): Promise<Map<string, string>> {
+    const rows = (await this.db('insights_events')
+      .select('user_ref')
+      .min({ first_seen: 'timestamp' })
+      .groupBy('user_ref')) as Array<{
+      user_ref: string;
+      first_seen: Date | string | number;
+    }>;
+    return new Map(
+      rows.map(r => [r.user_ref, isoDate(new Date(r.first_seen))]),
+    );
+  }
+
   async getActiveUsers(
     window: 'daily' | 'weekly',
     days: number,
@@ -139,6 +158,7 @@ export class AdoptionAnalyticsDatabase {
       user_ref: string;
       timestamp: Date | string;
     }>;
+    const firstSeen = await this.getFirstSeenByUser();
 
     // Bucket per user per day, then aggregate to the requested window.
     // Doing this in JS keeps the query portable across SQLite/Postgres.
@@ -153,7 +173,7 @@ export class AdoptionAnalyticsDatabase {
     const points: ActiveUsersSummary['points'] = [];
     if (window === 'daily') {
       for (const [date, users] of [...dailyBuckets.entries()].sort()) {
-        points.push({ date, activeUsers: users.size });
+        points.push(splitNewReturning(date, date, users, firstSeen));
       }
     } else {
       // Rolling 7-day window ending on each day that has any activity.
@@ -166,7 +186,7 @@ export class AdoptionAnalyticsDatabase {
             for (const u of us) users.add(u);
           }
         }
-        points.push({ date: day, activeUsers: users.size });
+        points.push(splitNewReturning(day, windowStart, users, firstSeen));
       }
     }
     return { window, points };
@@ -262,4 +282,29 @@ function daysAgoFromIso(iso: string, days: number): string {
   const d = new Date(`${iso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() - days);
   return isoDate(d);
+}
+
+/**
+ * Splits a bucket's active users into first-timers and returners. A user
+ * is new when their first-ever event date falls inside [from, to] —
+ * users missing from the map are treated as new so a bucket's parts
+ * always add up to its total.
+ */
+function splitNewReturning(
+  date: string,
+  from: string,
+  users: Set<string>,
+  firstSeen: Map<string, string>,
+): ActiveUsersSummary['points'][number] {
+  let newUsers = 0;
+  for (const user of users) {
+    const first = firstSeen.get(user);
+    if (first === undefined || (first >= from && first <= date)) newUsers += 1;
+  }
+  return {
+    date,
+    activeUsers: users.size,
+    newUsers,
+    returningUsers: users.size - newUsers,
+  };
 }

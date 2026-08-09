@@ -25,11 +25,16 @@ A KPI row plus three tabbed sections, with a 7 / 30 / 90-day range selector.
 Only Total Entities follows the range selector; the other three always describe
 "right now". Each card's sub-label states its baseline.
 
-| Tab       | Contents                                                        |
-| --------- | --------------------------------------------------------------- |
-| `users`   | DAU chart, WAU + sessions chart, active-user list               |
-| `catalog` | Entity growth over time, top-viewed entities, top visited pages |
-| `search`  | Search volume over time, most-searched terms                    |
+| Tab       | Contents                                                              |
+| --------- | --------------------------------------------------------------------- |
+| `users`   | DAU chart (new vs. returning), WAU + sessions chart, active-user list |
+| `catalog` | Entity growth over time, top-viewed entities, top visited pages       |
+| `search`  | Search volume over time, most-searched terms                          |
+| `plugins` | Per-plugin events, distinct users, share of activity and trend        |
+
+Plugin adoption only counts events that carry an analytics `pluginId`, so a
+plugin that never sets an analytics context won't appear even if its routes
+show up under top visited pages.
 
 The active-user list shows pseudonyms such as `user:masked/1a2b3c4d` unless the
 caller holds `adoption-analytics.users.read`. Pseudonyms are stable for a given salt, so

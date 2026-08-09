@@ -55,7 +55,7 @@ type Props<TId extends string> = {
 
 /**
  * Underline-style tab bar used to split the Adoption Analytics dashboard into
- * themed sections (Users / Catalog / Search). Visually distinct from
+ * themed sections (Users / Catalog / Search / Plugins). Visually distinct from
  * the pill-style range selector in `TopBar` so the two controls don't
  * get confused for the same thing.
  */
