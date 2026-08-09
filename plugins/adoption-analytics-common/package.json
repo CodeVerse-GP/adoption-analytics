@@ -1,6 +1,6 @@
 {
   "name": "@codeverse-gp/plugin-adoption-analytics-common",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Shared types and permission definitions for the Backstage adoption analytics plugins.",
   "license": "MIT",
   "author": "CodeVerse-GP",
