@@ -2,6 +2,7 @@ import { mockServices } from '@backstage/backend-test-utils';
 import { catalogServiceMock } from '@backstage/plugin-catalog-node/testUtils';
 import {
   AdoptionAnalyticsDashboardService,
+  docsSiteFromPath,
   pageGroupFromPath,
 } from './AdoptionAnalyticsDashboardService';
 import type { AdoptionAnalyticsDatabase } from './AdoptionAnalyticsDatabase';
@@ -42,11 +43,20 @@ function navigate(
 }
 
 function createService(events: RawEvent[]) {
+  // Mirrors the real query: earliest event date per user, across all
+  // history rather than the requested window.
+  const firstSeen = new Map<string, string>();
+  for (const e of events) {
+    const day = e.timestamp.toISOString().slice(0, 10);
+    const current = firstSeen.get(e.userRef);
+    if (current === undefined || day < current) firstSeen.set(e.userRef, day);
+  }
   return new AdoptionAnalyticsDashboardService({
     logger: mockServices.logger.mock(),
     db: {
       getRawEvents: jest.fn().mockResolvedValue(events),
       getEntityCountSnapshots: jest.fn().mockResolvedValue([]),
+      getFirstSeenByUser: jest.fn().mockResolvedValue(firstSeen),
     } as unknown as AdoptionAnalyticsDatabase,
     catalog: catalogServiceMock({ entities: [] }),
     auth: mockServices.auth(),
@@ -77,6 +87,69 @@ describe('pageGroupFromPath', () => {
   it('returns null for values that are not paths', () => {
     expect(pageGroupFromPath('Home Page')).toBeNull();
     expect(pageGroupFromPath('')).toBeNull();
+  });
+});
+
+describe('docsSiteFromPath', () => {
+  it('splits a docs path into its site ref and page', () => {
+    expect(docsSiteFromPath('/docs/default/component/foo/getting-started/')) //
+      .toEqual({ entityRef: 'component:default/foo', page: 'getting-started' });
+  });
+
+  it('maps the site root to the "/" page', () => {
+    expect(docsSiteFromPath('/docs/default/component/foo')).toEqual({
+      entityRef: 'component:default/foo',
+      page: '/',
+    });
+  });
+
+  it('keeps nested pages distinct and drops query / hash', () => {
+    expect(
+      docsSiteFromPath('/docs/default/system/bar/api/v2?tab=1#top'),
+    ).toEqual({ entityRef: 'system:default/bar', page: 'api/v2' });
+  });
+
+  it('returns null for non-docs paths', () => {
+    expect(docsSiteFromPath('/catalog/default/component/foo')).toBeNull();
+    expect(docsSiteFromPath('/docs')).toBeNull();
+    expect(docsSiteFromPath('Docs Home')).toBeNull();
+  });
+});
+
+describe('AdoptionAnalyticsDashboardService topDocs', () => {
+  it('rolls every page of a site into one row', async () => {
+    const service = createService([
+      navigate('/docs/default/component/foo'),
+      navigate('/docs/default/component/foo/setup'),
+      navigate('/docs/default/component/foo/setup', 0, 'user:default/bob'),
+      navigate('/docs/default/component/bar'),
+      navigate('/catalog/default/component/foo'),
+    ]);
+
+    const { topDocs } = await service.getDashboard('30d');
+
+    expect(topDocs).toEqual([
+      {
+        entityRef: 'component:default/foo',
+        name: 'foo',
+        kind: 'component',
+        owner: null,
+        views: 3,
+        readers: 2,
+        pages: 2,
+        trendPct: null,
+      },
+      {
+        entityRef: 'component:default/bar',
+        name: 'bar',
+        kind: 'component',
+        owner: null,
+        views: 1,
+        readers: 1,
+        pages: 1,
+        trendPct: null,
+      },
+    ]);
   });
 });
 

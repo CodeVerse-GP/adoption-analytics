@@ -4,14 +4,17 @@ import { parseEntityRef, stringifyEntityRef } from '@backstage/catalog-model';
 import type { CatalogService } from '@backstage/plugin-catalog-node';
 import type {
   ActiveUserSummary,
+  ActiveUsersSummary,
   EntityCountSnapshot,
   EntityGrowthPoint,
   AdoptionAnalyticsDashboard,
   AdoptionAnalyticsTimeRange,
   KpiWithDelta,
+  PluginAdoptionStat,
   SearchAnalytics,
   SearchTermStat,
   SearchVolumePoint,
+  TechDocsSiteStat,
   TopEntityStat,
   TopPageStat,
   WauSessionsBucket,
@@ -33,12 +36,17 @@ const RANGE_DAYS: Record<AdoptionAnalyticsTimeRange, number> = {
 
 const TOP_ENTITIES_LIMIT = 8;
 
+const TOP_DOCS_LIMIT = 8;
+
 /**
  * How many page groups the payload carries. Larger than the entity limit
  * because the table paginates client-side rather than showing every row
  * at once.
  */
 const TOP_PAGES_LIMIT = 20;
+
+/** Cap on the plugin table; a portal rarely runs more than a few dozen. */
+const PLUGIN_ADOPTION_LIMIT = 20;
 
 /**
  * Days of history needed to compute {@link SharedKpis}. Driven by
@@ -84,6 +92,10 @@ export class AdoptionAnalyticsDashboardService {
     const rawDays = Math.max(days * 2, wauHistoryDays);
     const raw = await db.getRawEvents(rawDays);
     const snapshots = await db.getEntityCountSnapshots(days * 2);
+    // Spans all retained history, not just `rawDays`, so the DAU split
+    // doesn't call a long-standing user "new" the first time they show
+    // up inside the selected window.
+    const firstSeenByUser = await db.getFirstSeenByUser();
 
     const now = new Date();
     const nowIso = now.toISOString();
@@ -112,7 +124,7 @@ export class AdoptionAnalyticsDashboardService {
       },
       dau: {
         window: 'daily',
-        points: this.dauSeries(current, windowStart, now),
+        points: this.dauSeries(current, windowStart, now, firstSeenByUser),
       },
       // Pass the full raw window: `wauSessions` has its own per-bucket
       // filter that walks back from `now`, and buckets earlier than the
@@ -121,8 +133,10 @@ export class AdoptionAnalyticsDashboardService {
       wauSessions: this.wauSessions(raw, windowStart, now, range),
       entityGrowth: this.entityGrowth(snapshots, range),
       topEntities: await this.topEntities(current, previous),
+      topDocs: await this.topDocs(current, previous),
       topPages: this.topPages(current, previous),
       activeUsers: this.activeUsers(current),
+      plugins: this.pluginAdoption(current, previous),
       search: this.searchAnalytics(current, windowStart, now),
     };
   }
@@ -215,7 +229,8 @@ export class AdoptionAnalyticsDashboardService {
     events: RawEvent[],
     from: Date,
     to: Date,
-  ): Array<{ date: string; activeUsers: number }> {
+    firstSeenByUser: Map<string, string>,
+  ): ActiveUsersSummary['points'] {
     const buckets = new Map<string, Set<string>>();
     for (const day of eachDay(from, to)) {
       buckets.set(day, new Set());
@@ -225,10 +240,20 @@ export class AdoptionAnalyticsDashboardService {
       const set = buckets.get(day);
       if (set) set.add(e.userRef);
     }
-    return [...buckets.entries()].map(([date, users]) => ({
-      date,
-      activeUsers: users.size,
-    }));
+    return [...buckets.entries()].map(([date, users]) => {
+      // Users missing from the map count as new so the two parts always
+      // sum back to `activeUsers`.
+      let newUsers = 0;
+      for (const user of users) {
+        if ((firstSeenByUser.get(user) ?? date) === date) newUsers += 1;
+      }
+      return {
+        date,
+        activeUsers: users.size,
+        newUsers,
+        returningUsers: users.size - newUsers,
+      };
+    });
   }
 
   private wauSessions(
@@ -395,28 +420,7 @@ export class AdoptionAnalyticsDashboardService {
 
     if (top.length === 0) return [];
 
-    const { catalog, auth, logger } = this.options;
-    let enriched: Map<string, Entity> = new Map();
-    try {
-      const credentials = await auth.getOwnServiceCredentials();
-      const refs = top.map(([ref]) => ref);
-      const { items } = await catalog.getEntitiesByRefs(
-        { entityRefs: refs, fields: ['kind', 'metadata.name', 'spec.owner'] },
-        { credentials },
-      );
-      enriched = new Map(
-        items
-          .filter((e): e is Entity => Boolean(e))
-          .map(e => [stringifyEntityRef(e).toLowerCase(), e]),
-      );
-    } catch (err) {
-      // Non-fatal — we can still return views without owner enrichment.
-      logger.warn(
-        `adoption-analytics-backend: failed to enrich top entities from catalog: ${
-          (err as Error).message
-        }`,
-      );
-    }
+    const enriched = await this.enrichEntities(top.map(([ref]) => ref));
 
     return top.map(([ref, views]) => {
       const parsed = safeParseRef(ref);
@@ -433,6 +437,69 @@ export class AdoptionAnalyticsDashboardService {
         trendPct: prev === 0 ? null : pctChange(prev, views),
       };
     });
+  }
+
+  // ---- Top TechDocs sites ---------------------------------------------
+
+  private async topDocs(
+    current: RawEvent[],
+    previous: RawEvent[],
+  ): Promise<TechDocsSiteStat[]> {
+    const currentStats = countDocsViews(current);
+    const previousStats = countDocsViews(previous);
+
+    const top = [...currentStats.entries()]
+      .sort((a, b) => b[1].views - a[1].views || a[0].localeCompare(b[0]))
+      .slice(0, TOP_DOCS_LIMIT);
+
+    if (top.length === 0) return [];
+
+    const enriched = await this.enrichEntities(top.map(([ref]) => ref));
+
+    return top.map(([ref, v]) => {
+      const parsed = safeParseRef(ref);
+      const entity = enriched.get(ref.toLowerCase());
+      const prev = previousStats.get(ref)?.views ?? 0;
+      return {
+        entityRef: ref,
+        name: parsed.name,
+        kind: entity?.kind ?? parsed.kind,
+        owner:
+          (entity?.spec?.owner as string | undefined) ?? parsed.owner ?? null,
+        views: v.views,
+        readers: v.users.size,
+        pages: v.pages.size,
+        trendPct: prev === 0 ? null : pctChange(prev, v.views),
+      };
+    });
+  }
+
+  /**
+   * Resolves kind/owner for the given entity refs. Enrichment failures
+   * are non-fatal: the tables fall back to the values parsed out of the
+   * ref itself rather than dropping rows.
+   */
+  private async enrichEntities(refs: string[]): Promise<Map<string, Entity>> {
+    const { catalog, auth, logger } = this.options;
+    try {
+      const credentials = await auth.getOwnServiceCredentials();
+      const { items } = await catalog.getEntitiesByRefs(
+        { entityRefs: refs, fields: ['kind', 'metadata.name', 'spec.owner'] },
+        { credentials },
+      );
+      return new Map(
+        items
+          .filter((e): e is Entity => Boolean(e))
+          .map(e => [stringifyEntityRef(e).toLowerCase(), e]),
+      );
+    } catch (err) {
+      logger.warn(
+        `adoption-analytics-backend: failed to enrich entities from catalog: ${
+          (err as Error).message
+        }`,
+      );
+      return new Map();
+    }
   }
 
   // ---- Top pages -------------------------------------------------------
@@ -456,6 +523,56 @@ export class AdoptionAnalyticsDashboardService {
           };
         })
     );
+  }
+
+  // ---- Plugin adoption -------------------------------------------------
+
+  /**
+   * Usage per plugin. Events without a `pluginId` are dropped rather
+   * than bucketed as "unknown" — they come from captures that never set
+   * an analytics context, so a catch-all row would name a plugin nobody
+   * can act on.
+   */
+  private pluginAdoption(
+    current: RawEvent[],
+    previous: RawEvent[],
+  ): PluginAdoptionStat[] {
+    const previousCounts = countPluginEvents(previous);
+    const byPlugin = new Map<
+      string,
+      { events: number; users: Set<string>; last: number }
+    >();
+    for (const e of current) {
+      const pluginId = e.pluginId?.trim();
+      if (!pluginId) continue;
+      const t = e.timestamp.getTime();
+      const cur = byPlugin.get(pluginId);
+      if (!cur) {
+        byPlugin.set(pluginId, {
+          events: 1,
+          users: new Set([e.userRef]),
+          last: t,
+        });
+      } else {
+        cur.events += 1;
+        cur.users.add(e.userRef);
+        if (t > cur.last) cur.last = t;
+      }
+    }
+
+    return [...byPlugin.entries()]
+      .sort((a, b) => b[1].events - a[1].events || a[0].localeCompare(b[0]))
+      .slice(0, PLUGIN_ADOPTION_LIMIT)
+      .map(([pluginId, v]) => {
+        const prev = previousCounts.get(pluginId) ?? 0;
+        return {
+          pluginId,
+          events: v.events,
+          users: v.users.size,
+          lastSeen: new Date(v.last).toISOString(),
+          trendPct: prev === 0 ? null : pctChange(prev, v.events),
+        };
+      });
   }
 }
 
@@ -509,6 +626,62 @@ function countPageViews(events: RawEvent[]): Map<string, number> {
     counts.set(group, (counts.get(group) ?? 0) + 1);
   }
   return counts;
+}
+
+function countPluginEvents(events: RawEvent[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const e of events) {
+    const pluginId = e.pluginId?.trim();
+    if (!pluginId) continue;
+    counts.set(pluginId, (counts.get(pluginId) ?? 0) + 1);
+  }
+  return counts;
+}
+
+type DocsSiteCounts = {
+  views: number;
+  users: Set<string>;
+  pages: Set<string>;
+};
+
+function countDocsViews(events: RawEvent[]): Map<string, DocsSiteCounts> {
+  const stats = new Map<string, DocsSiteCounts>();
+  for (const e of events) {
+    if (e.action !== 'navigate') continue;
+    const path = extractPath(e.subject) ?? e.pathname;
+    if (!path) continue;
+    const site = docsSiteFromPath(path);
+    if (!site) continue;
+    let cur = stats.get(site.entityRef);
+    if (!cur) {
+      cur = { views: 0, users: new Set(), pages: new Set() };
+      stats.set(site.entityRef, cur);
+    }
+    cur.views += 1;
+    cur.users.add(e.userRef);
+    cur.pages.add(site.page);
+  }
+  return stats;
+}
+
+/**
+ * Splits a TechDocs pathname into the site's entity ref and the page
+ * within it: `/docs/default/component/foo/getting-started/` yields
+ * `component:default/foo` and `getting-started`. The site root maps to
+ * the page `/`. Returns null for anything that isn't a docs path.
+ */
+export function docsSiteFromPath(
+  pathname: string,
+): { entityRef: string; page: string } | null {
+  const clean = pathname.split(/[?#]/)[0].trim();
+  if (!clean.startsWith('/')) return null;
+  const parts = clean.split('/').filter(Boolean);
+  if (parts.length < 4 || parts[0].toLowerCase() !== 'docs') return null;
+  const [, namespace, kind, name, ...rest] = parts;
+  return {
+    entityRef: `${kind.toLowerCase()}:${namespace.toLowerCase()}/${name.toLowerCase()}`,
+    page: rest.length === 0 ? '/' : rest.join('/').toLowerCase(),
+  };
 }
 
 /**

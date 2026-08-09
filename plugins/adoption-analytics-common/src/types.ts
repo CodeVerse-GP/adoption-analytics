@@ -72,6 +72,14 @@ export interface ActiveUsersSummary {
   points: Array<{
     date: string;
     activeUsers: number;
+    /**
+     * Active users whose first-ever recorded event falls in this bucket.
+     * Judged against all retained history, not just the selected range,
+     * so someone active last month never counts as new again.
+     */
+    newUsers: number;
+    /** Active users that had already been seen before this bucket. */
+    returningUsers: number;
   }>;
 }
 
@@ -163,11 +171,55 @@ export interface ActiveUserSummary {
 }
 
 /**
+ * One row of the "Top TechDocs Sites" table.
+ *
+ * A "site" is the entity that owns the docs, so every page under
+ * `/docs/default/component/foo/**` rolls up into a single row — the
+ * useful question is which documentation gets read, not which heading
+ * inside it.
+ */
+export interface TechDocsSiteStat {
+  /** Entity ref of the documented entity, e.g. `component:default/foo`. */
+  entityRef: string;
+  name: string;
+  kind: string;
+  owner: string | null;
+  /** Page views across the whole site in the current window. */
+  views: number;
+  /** Distinct users who opened at least one page of the site. */
+  readers: number;
+  /** Distinct pages read within the site. */
+  pages: number;
+  /** Percentage change in views vs. the previous period. Null if unknown. */
+  trendPct: number | null;
+}
+
+/**
+ * One row of the "Plugin Adoption" table: how much a single Backstage
+ * plugin was used in the current window.
+ *
+ * Only events that carry an analytics `pluginId` are counted, so a
+ * plugin that never sets an analytics context stays invisible here
+ * even if its pages show up under {@link TopPageStat}.
+ */
+export interface PluginAdoptionStat {
+  /** Backstage plugin id, e.g. `catalog` or `techdocs`. */
+  pluginId: string;
+  /** Events attributed to the plugin in the current window. */
+  events: number;
+  /** Distinct users who triggered at least one of those events. */
+  users: number;
+  /** ISO timestamp of the plugin's most recent event. */
+  lastSeen: string;
+  /** Percentage change in events vs. the previous period. Null if unknown. */
+  trendPct: number | null;
+}
+
+/**
  * Aggregated search-query statistics.
  */
 export interface SearchTermStat {
-  /** Normalised query text (lowercased, trimmed). */
-  query: string;
+  /** Normalised query text (lowercased, trimmed). */ query: string;
   /** Number of times the query was searched in the window. */
   count: number;
   /** Number of distinct users who ran that query. */
@@ -213,10 +265,14 @@ export interface AdoptionAnalyticsDashboard {
   wauSessions: WauSessionsBucket[];
   entityGrowth: EntityGrowthPoint[];
   topEntities: TopEntityStat[];
+  /** Most-read TechDocs sites in the current window, most-viewed first. */
+  topDocs: TechDocsSiteStat[];
   /** Most-visited page groups in the current window, most-viewed first. */
   topPages: TopPageStat[];
   /** Distinct users active in the current window, most-recent first. */
   activeUsers: ActiveUserSummary[];
+  /** Per-plugin usage in the current window, most-used first. */
+  plugins: PluginAdoptionStat[];
   /** Aggregated search-query statistics for the current window. */
   search: SearchAnalytics;
 }

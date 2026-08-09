@@ -14,9 +14,11 @@ import { ActiveUsersList } from './ActiveUsersList';
 import { DauChart } from './DauChart';
 import { EntityGrowthChart } from './EntityGrowthChart';
 import { KpiCards } from './KpiCards';
+import { PluginAdoptionTable } from './PluginAdoptionTable';
 import { SearchVolumeChart } from './SearchVolumeChart';
 import { SectionTabs, type SectionTabDef } from './SectionTabs';
 import { TopBar } from './TopBar';
+import { TopDocsTable } from './TopDocsTable';
 import { TopEntitiesTable } from './TopEntitiesTable';
 import { TopPagesTable } from './TopPagesTable';
 import { TopSearchTerms } from './TopSearchTerms';
@@ -24,9 +26,14 @@ import { WauSessionsChart } from './WauSessionsChart';
 import { analyticsColors, uiFont } from './tokens';
 import { useAdoptionAnalyticsFonts } from './useAdoptionAnalyticsFonts';
 
-type SectionId = 'catalog' | 'search' | 'users';
+type SectionId = 'catalog' | 'search' | 'users' | 'plugins';
 const DEFAULT_SECTION: SectionId = 'users';
-const SECTION_IDS: readonly SectionId[] = ['users', 'catalog', 'search'];
+const SECTION_IDS: readonly SectionId[] = [
+  'users',
+  'catalog',
+  'search',
+  'plugins',
+];
 
 function isSectionId(v: string | null): v is SectionId {
   return v !== null && (SECTION_IDS as readonly string[]).includes(v);
@@ -212,6 +219,7 @@ function renderBody({
     { id: 'users', label: 'Users', count: data.activeUsers.length },
     { id: 'catalog', label: 'Catalog', count: data.topEntities.length },
     { id: 'search', label: 'Search', count: data.search.total },
+    { id: 'plugins', label: 'Plugins', count: data.plugins.length },
   ];
 
   return (
@@ -226,6 +234,9 @@ function renderBody({
       ) : null}
       {activeTab === 'search' ? (
         <SearchSection data={data} classes={classes} />
+      ) : null}
+      {activeTab === 'plugins' ? (
+        <PluginAdoptionTable plugins={data.plugins} />
       ) : null}
     </>
   );
@@ -253,6 +264,7 @@ function CatalogSection({ data }: SectionProps) {
     <>
       <EntityGrowthChart data={data.entityGrowth} />
       <TopEntitiesTable entities={data.topEntities} />
+      <TopDocsTable docs={data.topDocs} />
       <TopPagesTable pages={data.topPages} />
     </>
   );
