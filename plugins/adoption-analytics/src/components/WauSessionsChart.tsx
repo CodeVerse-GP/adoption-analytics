@@ -47,7 +47,6 @@ export function WauSessionsChart({ data }: Props) {
             axisLine={axisStyle.axisLine}
             tickLine={axisStyle.tickLine}
             allowDecimals={false}
-            width={36}
           />
           <Tooltip
             cursor={{ fill: axisStyle.cursorFill }}
