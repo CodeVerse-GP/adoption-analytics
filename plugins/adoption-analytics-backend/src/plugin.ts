@@ -3,6 +3,7 @@ import {
   createBackendPlugin,
 } from '@backstage/backend-plugin-api';
 import { catalogServiceRef } from '@backstage/plugin-catalog-node';
+import { adoptionAnalyticsPermissions } from '@codeverse-gp/plugin-adoption-analytics-common';
 import { createRouter } from './router';
 import { EntitySnapshotCollector } from './service/EntitySnapshotCollector';
 import { EventsQueue } from './service/EventsQueue';
@@ -24,6 +25,7 @@ export const adoptionAnalyticsPlugin = createBackendPlugin({
         cache: coreServices.cache,
         config: coreServices.rootConfig,
         permissions: coreServices.permissions,
+        permissionsRegistry: coreServices.permissionsRegistry,
         catalog: catalogServiceRef,
       },
       async init({
@@ -37,8 +39,11 @@ export const adoptionAnalyticsPlugin = createBackendPlugin({
         cache,
         config,
         permissions,
+        permissionsRegistry,
         catalog,
       }) {
+        permissionsRegistry.addPermissions(adoptionAnalyticsPermissions);
+
         const db = await AdoptionAnalyticsDatabase.create({ database, logger });
 
         const eventsQueue = new EventsQueue(db, logger);
